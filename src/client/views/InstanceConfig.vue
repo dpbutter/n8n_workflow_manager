@@ -95,30 +95,30 @@ async function deleteInstance(id: string) {
     </div>
 
     <!-- Instance List -->
-    <div class="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+    <div class="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
       <div
         v-for="instance in store.instances"
         :key="instance.id"
-        class="bg-white rounded-lg shadow p-6"
+        class="bg-white rounded-lg shadow p-6 overflow-hidden"
       >
-        <div class="flex items-start justify-between">
-          <div>
-            <h3 class="text-lg font-medium text-gray-900">{{ instance.name }}</h3>
+        <div class="flex items-start justify-between gap-3">
+          <div class="min-w-0 flex-1">
+            <h3 class="text-lg font-medium text-gray-900 truncate">{{ instance.name }}</h3>
             <p class="mt-1 text-sm text-gray-500 truncate">{{ instance.url }}</p>
-            <p v-if="instance.projectId" class="mt-1 text-xs text-gray-400">
+            <p v-if="instance.projectId" class="mt-1 text-xs text-gray-400 truncate">
               Project: {{ instance.projectId }}
             </p>
           </div>
           <span
             :class="[
-              'inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium',
+              'inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium whitespace-nowrap flex-shrink-0',
               instance.hasApiKey ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
             ]"
           >
             {{ instance.hasApiKey ? 'Connected' : 'No Key' }}
           </span>
         </div>
-        <div class="mt-4 flex space-x-2">
+        <div class="mt-4 flex space-x-4">
           <button
             @click="openForm(instance)"
             class="text-sm text-indigo-600 hover:text-indigo-500"
