@@ -76,6 +76,9 @@ function getGitStatusLabel(status: WorkflowGitStatus | undefined) {
               Updated
             </th>
             <th scope="col" class="px-3 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
+              Tags
+            </th>
+            <th scope="col" class="px-3 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
               Git
             </th>
             <th scope="col" class="px-3 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
@@ -125,6 +128,18 @@ function getGitStatusLabel(status: WorkflowGitStatus | undefined) {
             </td>
             <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
               {{ formatDateTime(workflow.updatedAt) }}
+            </td>
+            <td class="px-3 py-4 text-sm">
+              <div class="flex flex-wrap gap-1">
+                <span
+                  v-for="tag in workflow.tags"
+                  :key="tag.id"
+                  class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-700"
+                >
+                  {{ tag.name }}
+                </span>
+                <span v-if="!workflow.tags?.length" class="text-gray-400">—</span>
+              </div>
             </td>
             <td class="whitespace-nowrap px-3 py-4 text-sm">
               <span
