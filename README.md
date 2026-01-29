@@ -29,7 +29,7 @@ A web-based tool for managing n8n workflows across multiple instances. Browse, b
 1. Clone the repository:
    ```bash
    git clone <repository-url>
-   cd workflow_manager
+   cd n8n_workflow_manager
    ```
 
 2. Install dependencies:
