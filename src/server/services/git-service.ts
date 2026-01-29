@@ -8,11 +8,28 @@ const DATA_DIR = join(process.cwd(), 'data')
 const WORKFLOWS_DIR = join(DATA_DIR, 'workflows')
 
 let git: SimpleGit
+let gitInitialized = false
 
-function getGit(): SimpleGit {
+async function getGit(): Promise<SimpleGit> {
   if (!git) {
-    git = simpleGit(process.cwd())
+    git = simpleGit(WORKFLOWS_DIR)
   }
+
+  // Initialize git repo in workflows dir if needed
+  if (!gitInitialized) {
+    if (!existsSync(WORKFLOWS_DIR)) {
+      await mkdir(WORKFLOWS_DIR, { recursive: true })
+    }
+
+    const isRepo = existsSync(join(WORKFLOWS_DIR, '.git'))
+    if (!isRepo) {
+      await git.init()
+      await git.addConfig('user.email', 'workflow-manager@local')
+      await git.addConfig('user.name', 'Workflow Manager')
+    }
+    gitInitialized = true
+  }
+
   return git
 }
 
@@ -34,7 +51,7 @@ export async function backupWorkflows(
   message?: string
 ): Promise<GitCommit> {
   const instanceDir = await ensureWorkflowsDir(instanceName)
-  const g = getGit()
+  const g = await getGit()
 
   // Write each workflow to a file
   const filePaths: string[] = []
@@ -65,15 +82,14 @@ export async function backupWorkflows(
 }
 
 export async function getBackupHistory(limit = 20): Promise<GitCommit[]> {
-  const g = getGit()
+  const g = await getGit()
 
   try {
     const log = await g.log({
-      maxCount: limit,
-      file: WORKFLOWS_DIR
+      maxCount: limit
     })
 
-    return log.all.map(entry => ({
+    return log.all.map((entry: { hash: string; date: string; message: string; author_name: string }) => ({
       hash: entry.hash,
       date: entry.date,
       message: entry.message,
@@ -85,7 +101,7 @@ export async function getBackupHistory(limit = 20): Promise<GitCommit[]> {
 }
 
 export async function getFileAtCommit(commitHash: string, filePath: string): Promise<string> {
-  const g = getGit()
+  const g = await getGit()
   return g.show([`${commitHash}:${filePath}`])
 }
 

@@ -59,6 +59,8 @@ Workflows are saved to: `data/workflows/<sanitized-instance-name>/<workflow-id>-
 
 The sanitization function replaces non-alphanumeric characters with underscores and lowercases.
 
+**Important:** The backup system uses a **separate git repo** inside `data/workflows/`, not the project root. This keeps workflow backup history separate from the project's source code history. The repo is auto-initialized on first backup.
+
 ### Git Status Detection
 
 Compares `workflow.updatedAt` timestamp with the `updatedAt` stored in the backed-up JSON file. If the workflow's timestamp is newer, it's marked as "Modified".
