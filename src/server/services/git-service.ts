@@ -27,6 +27,18 @@ async function getGit(): Promise<SimpleGit> {
       await git.addConfig('user.email', 'workflow-manager@local')
       await git.addConfig('user.name', 'Workflow Manager')
     }
+
+    // Auto-commit any untracked workflow files (e.g., from migration)
+    try {
+      const status = await git.status()
+      if (status.not_added.length > 0 || status.modified.length > 0) {
+        await git.add('.')
+        await git.commit('Auto-commit existing workflow files')
+      }
+    } catch {
+      // Ignore errors during auto-commit (e.g., nothing to commit)
+    }
+
     gitInitialized = true
   }
 
