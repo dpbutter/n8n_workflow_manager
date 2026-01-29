@@ -9,6 +9,13 @@ export interface N8nInstance {
   lastConnected?: string
 }
 
+// n8n Project
+export interface N8nProject {
+  id: string
+  name: string
+  type: 'personal' | 'team'
+}
+
 // n8n Workflow (simplified from n8n's full type)
 export interface N8nWorkflow {
   id: string
@@ -42,6 +49,8 @@ export interface WorkflowListItem {
   updatedAt: string
   isArchived?: boolean
   tags?: Array<{ id: string; name: string }>
+  homeProject?: N8nProject
+  sharedWithProjects?: N8nProject[]
 }
 
 // Git status for a workflow

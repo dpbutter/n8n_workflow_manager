@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import { useWorkflowsStore, type TransferResult } from '../stores/workflows'
+import { ref, computed, watch } from 'vue'
+import { useWorkflowsStore, type TransferResult, type N8nProject } from '../stores/workflows'
 import type { Instance } from '../stores/instances'
 
 const props = defineProps<{
@@ -16,9 +16,26 @@ const emit = defineEmits<{
 
 const workflowsStore = useWorkflowsStore()
 const targetInstanceId = ref<string | null>(null)
+const targetProjectId = ref<string | null>(null)
+const targetProjects = ref<N8nProject[]>([])
+const loadingProjects = ref(false)
 const transferring = ref(false)
 const results = ref<TransferResult[] | null>(null)
 const errorMessage = ref<string | null>(null)
+
+// Fetch projects when target instance changes
+watch(targetInstanceId, async (newId) => {
+  targetProjectId.value = null
+  targetProjects.value = []
+  if (newId) {
+    loadingProjects.value = true
+    try {
+      targetProjects.value = await workflowsStore.fetchProjects(newId)
+    } finally {
+      loadingProjects.value = false
+    }
+  }
+})
 
 const availableTargets = computed(() => {
   return props.instances.filter(i => i.id !== props.sourceInstanceId)
@@ -42,7 +59,8 @@ async function transfer() {
     results.value = await workflowsStore.transferWorkflows(
       props.sourceInstanceId,
       targetInstanceId.value,
-      props.workflowIds
+      props.workflowIds,
+      targetProjectId.value || undefined
     )
   } catch (e: unknown) {
     console.error('Transfer failed:', e)
@@ -97,6 +115,23 @@ function done() {
                 {{ instance.name }}
               </option>
             </select>
+          </div>
+
+          <div v-if="targetInstanceId" class="mb-4">
+            <label class="block text-sm font-medium text-gray-700">Target Project (optional)</label>
+            <select
+              v-model="targetProjectId"
+              :disabled="loadingProjects"
+              class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2 disabled:opacity-50"
+            >
+              <option :value="null">{{ loadingProjects ? 'Loading projects...' : 'Default (personal project)' }}</option>
+              <option v-for="project in targetProjects" :key="project.id" :value="project.id">
+                {{ project.name }} {{ project.type === 'personal' ? '(Personal)' : '' }}
+              </option>
+            </select>
+            <p v-if="!loadingProjects && targetProjects.length === 0" class="mt-1 text-xs text-gray-500">
+              No projects found or projects API not available
+            </p>
           </div>
 
           <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-4">

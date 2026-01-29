@@ -4,6 +4,23 @@ import { N8nApiService } from '../services/n8n-api.js'
 
 const router = Router()
 
+// List projects from an instance
+router.get('/:instanceId/projects', async (req, res) => {
+  try {
+    const instance = await instanceStore.getInstanceById(req.params.instanceId)
+    if (!instance) {
+      return res.status(404).json({ success: false, error: 'Instance not found' })
+    }
+
+    const api = new N8nApiService(instance)
+    const projects = await api.listProjects()
+
+    res.json({ success: true, data: projects })
+  } catch (error) {
+    res.status(500).json({ success: false, error: String(error) })
+  }
+})
+
 // List workflows from an instance
 router.get('/:instanceId', async (req, res) => {
   try {
@@ -42,7 +59,7 @@ router.get('/:instanceId/:workflowId', async (req, res) => {
 // Transfer workflows to another instance
 router.post('/transfer', async (req, res) => {
   try {
-    const { sourceInstanceId, targetInstanceId, workflowIds } = req.body
+    const { sourceInstanceId, targetInstanceId, workflowIds, targetProjectId } = req.body
 
     if (!sourceInstanceId || !targetInstanceId || !workflowIds?.length) {
       return res.status(400).json({
@@ -79,8 +96,8 @@ router.post('/transfer', async (req, res) => {
           settings: workflow.settings
         }
 
-        // Create in target
-        const created = await targetApi.createWorkflow(importData)
+        // Create in target (optionally in a specific project)
+        const created = await targetApi.createWorkflow(importData, targetProjectId)
 
         results.push({
           workflowId,

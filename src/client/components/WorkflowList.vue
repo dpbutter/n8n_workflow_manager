@@ -47,7 +47,7 @@ function getGitStatusLabel(status: WorkflowGitStatus | undefined) {
     </div>
 
     <!-- Workflow Table -->
-    <div v-else class="overflow-hidden shadow ring-1 ring-black ring-opacity-5 rounded-lg">
+    <div v-else class="overflow-x-auto shadow ring-1 ring-black ring-opacity-5 rounded-lg">
       <table class="min-w-full divide-y divide-gray-300">
         <thead class="bg-gray-50">
           <tr>
@@ -67,6 +67,9 @@ function getGitStatusLabel(status: WorkflowGitStatus | undefined) {
             </th>
             <th scope="col" class="px-3 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
               Status
+            </th>
+            <th scope="col" class="px-3 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
+              Project
             </th>
             <th
               scope="col"
@@ -125,6 +128,12 @@ function getGitStatusLabel(status: WorkflowGitStatus | undefined) {
               >
                 {{ workflow.active ? 'Active' : 'Inactive' }}
               </span>
+            </td>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
+              <span v-if="workflow.homeProject" :title="workflow.homeProject.id">
+                {{ workflow.homeProject.name }}
+              </span>
+              <span v-else class="text-gray-400">—</span>
             </td>
             <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
               {{ formatDateTime(workflow.updatedAt) }}

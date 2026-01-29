@@ -2,6 +2,12 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import axios from 'axios'
 
+export interface N8nProject {
+  id: string
+  name: string
+  type: 'personal' | 'team'
+}
+
 export interface Workflow {
   id: string
   name: string
@@ -10,6 +16,8 @@ export interface Workflow {
   updatedAt: string
   isArchived?: boolean
   tags?: Array<{ id: string; name: string }>
+  homeProject?: N8nProject
+  sharedWithProjects?: N8nProject[]
 }
 
 export interface WorkflowGitStatus {
@@ -110,7 +118,8 @@ export const useWorkflowsStore = defineStore('workflows', () => {
   async function transferWorkflows(
     sourceInstanceId: string,
     targetInstanceId: string,
-    workflowIds: string[]
+    workflowIds: string[],
+    targetProjectId?: string
   ): Promise<TransferResult[]> {
     loading.value = true
     error.value = null
@@ -118,7 +127,8 @@ export const useWorkflowsStore = defineStore('workflows', () => {
       const response = await axios.post('/api/workflows/transfer', {
         sourceInstanceId,
         targetInstanceId,
-        workflowIds
+        workflowIds,
+        targetProjectId
       })
       return response.data.data
     } catch (e) {
@@ -126,6 +136,15 @@ export const useWorkflowsStore = defineStore('workflows', () => {
       throw e
     } finally {
       loading.value = false
+    }
+  }
+
+  async function fetchProjects(instanceId: string): Promise<N8nProject[]> {
+    try {
+      const response = await axios.get(`/api/workflows/${instanceId}/projects`)
+      return response.data.data || []
+    } catch {
+      return []
     }
   }
 
@@ -146,6 +165,7 @@ export const useWorkflowsStore = defineStore('workflows', () => {
     selectedWorkflows,
     fetchWorkflows,
     fetchGitStatus,
+    fetchProjects,
     toggleWorkflowSelection,
     clearSelection,
     selectAll,

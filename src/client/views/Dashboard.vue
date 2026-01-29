@@ -17,6 +17,12 @@ const showArchived = ref(false)
 const sortField = ref<'name' | 'updatedAt'>('updatedAt')
 const sortDirection = ref<'asc' | 'desc'>('desc')
 
+// Filters
+const filterProject = ref<string | null>(null)
+const filterStatus = ref<'all' | 'active' | 'inactive'>('all')
+const filterTag = ref<string | null>(null)
+const filterGitStatus = ref<'all' | 'synced' | 'modified' | 'not_backed_up'>('all')
+
 onMounted(async () => {
   await instancesStore.fetchInstances()
   if (instancesStore.instances.length > 0) {
@@ -28,6 +34,11 @@ watch(selectedInstanceId, (newId) => {
   if (newId) {
     workflowsStore.clearSelection()
     workflowsStore.fetchWorkflows(newId, showArchived.value)
+    // Reset filters when instance changes
+    filterProject.value = null
+    filterStatus.value = 'all'
+    filterTag.value = null
+    filterGitStatus.value = 'all'
   }
 })
 
@@ -41,6 +52,32 @@ const selectedInstance = computed(() => {
   return instancesStore.instances.find(i => i.id === selectedInstanceId.value)
 })
 
+// Get unique projects from workflows
+const uniqueProjects = computed(() => {
+  if (!selectedInstanceId.value) return []
+  const all = workflowsStore.workflows[selectedInstanceId.value] || []
+  const projectMap = new Map<string, { id: string; name: string }>()
+  for (const w of all) {
+    if (w.homeProject) {
+      projectMap.set(w.homeProject.id, { id: w.homeProject.id, name: w.homeProject.name })
+    }
+  }
+  return Array.from(projectMap.values()).sort((a, b) => a.name.localeCompare(b.name))
+})
+
+// Get unique tags from workflows
+const uniqueTags = computed(() => {
+  if (!selectedInstanceId.value) return []
+  const all = workflowsStore.workflows[selectedInstanceId.value] || []
+  const tagSet = new Set<string>()
+  for (const w of all) {
+    for (const tag of w.tags || []) {
+      tagSet.add(tag.name)
+    }
+  }
+  return Array.from(tagSet).sort()
+})
+
 const workflows = computed(() => {
   if (!selectedInstanceId.value) return []
   let all = workflowsStore.workflows[selectedInstanceId.value] || []
@@ -48,6 +85,38 @@ const workflows = computed(() => {
   // Filter by search
   if (searchQuery.value) {
     all = all.filter(w => w.name.toLowerCase().includes(searchQuery.value.toLowerCase()))
+  }
+
+  // Filter by project
+  if (filterProject.value) {
+    all = all.filter(w => w.homeProject?.id === filterProject.value)
+  }
+
+  // Filter by status
+  if (filterStatus.value === 'active') {
+    all = all.filter(w => w.active)
+  } else if (filterStatus.value === 'inactive') {
+    all = all.filter(w => !w.active)
+  }
+
+  // Filter by tag
+  if (filterTag.value) {
+    all = all.filter(w => w.tags?.some(t => t.name === filterTag.value))
+  }
+
+  // Filter by git status
+  if (filterGitStatus.value !== 'all') {
+    all = all.filter(w => {
+      const status = workflowsStore.gitStatus[w.id]
+      if (filterGitStatus.value === 'synced') {
+        return status?.hasBackup && !status?.isModified
+      } else if (filterGitStatus.value === 'modified') {
+        return status?.hasBackup && status?.isModified
+      } else if (filterGitStatus.value === 'not_backed_up') {
+        return !status?.hasBackup
+      }
+      return true
+    })
   }
 
   // Sort
@@ -151,14 +220,65 @@ function openTransfer() {
     </div>
 
     <!-- Filters -->
-    <div class="mt-4 flex items-center gap-4">
-      <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+    <div class="mt-4 flex flex-wrap items-center gap-4">
+      <div class="sm:w-40">
+        <label class="block text-xs font-medium text-gray-500">Project</label>
+        <select
+          v-model="filterProject"
+          class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm border p-1.5"
+        >
+          <option :value="null">All projects</option>
+          <option v-for="project in uniqueProjects" :key="project.id" :value="project.id">
+            {{ project.name }}
+          </option>
+        </select>
+      </div>
+
+      <div class="sm:w-32">
+        <label class="block text-xs font-medium text-gray-500">Status</label>
+        <select
+          v-model="filterStatus"
+          class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm border p-1.5"
+        >
+          <option value="all">All</option>
+          <option value="active">Active</option>
+          <option value="inactive">Inactive</option>
+        </select>
+      </div>
+
+      <div class="sm:w-40">
+        <label class="block text-xs font-medium text-gray-500">Tag</label>
+        <select
+          v-model="filterTag"
+          class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm border p-1.5"
+        >
+          <option :value="null">All tags</option>
+          <option v-for="tag in uniqueTags" :key="tag" :value="tag">
+            {{ tag }}
+          </option>
+        </select>
+      </div>
+
+      <div class="sm:w-40">
+        <label class="block text-xs font-medium text-gray-500">Git Status</label>
+        <select
+          v-model="filterGitStatus"
+          class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm border p-1.5"
+        >
+          <option value="all">All</option>
+          <option value="synced">Synced</option>
+          <option value="modified">Modified</option>
+          <option value="not_backed_up">Not backed up</option>
+        </select>
+      </div>
+
+      <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer mt-5">
         <input
           v-model="showArchived"
           type="checkbox"
           class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-600"
         />
-        Show archived workflows
+        Show archived
       </label>
     </div>
 
