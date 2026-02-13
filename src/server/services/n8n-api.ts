@@ -1,5 +1,5 @@
 import axios, { AxiosInstance } from 'axios'
-import type { N8nInstance, N8nWorkflow, N8nProject, WorkflowListItem, WorkflowListResponse } from '../../shared/types.js'
+import type { N8nInstance, N8nWorkflow, N8nProject, N8nCredentialRef, WorkflowListItem, WorkflowListResponse } from '../../shared/types.js'
 
 export class N8nApiService {
   private client: AxiosInstance
@@ -101,5 +101,17 @@ export class N8nApiService {
 
   async deleteWorkflow(workflowId: string): Promise<void> {
     await this.client.delete(`/workflows/${workflowId}`)
+  }
+
+  async listCredentials(): Promise<N8nCredentialRef[]> {
+    const response = await this.client.get<{ data: N8nCredentialRef[] }>('/credentials')
+    return response.data.data || []
+  }
+
+  async listAllWorkflows(): Promise<WorkflowListItem[]> {
+    const response = await this.client.get<WorkflowListResponse>('/workflows', {
+      params: { limit: 250 }
+    })
+    return response.data.data
   }
 }

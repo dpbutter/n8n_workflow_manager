@@ -4,12 +4,14 @@ import { useInstancesStore } from '../stores/instances'
 import { useWorkflowsStore, type Workflow } from '../stores/workflows'
 import WorkflowList from '../components/WorkflowList.vue'
 import TransferModal from '../components/TransferModal.vue'
+import MigrateModal from '../components/MigrateModal.vue'
 
 const instancesStore = useInstancesStore()
 const workflowsStore = useWorkflowsStore()
 
 const selectedInstanceId = ref<string | null>(null)
 const showTransferModal = ref(false)
+const showMigrateModal = ref(false)
 const searchQuery = ref('')
 const backupMessage = ref('')
 const showBackupSuccess = ref(false)
@@ -161,6 +163,12 @@ function openTransfer() {
     showTransferModal.value = true
   }
 }
+
+function openMigrate() {
+  if (selectedCount.value > 0) {
+    showMigrateModal.value = true
+  }
+}
 </script>
 
 <template>
@@ -306,6 +314,13 @@ function openTransfer() {
           Transfer
         </button>
         <button
+          @click="openMigrate"
+          :disabled="instancesStore.instances.length < 2"
+          class="rounded-md bg-purple-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-purple-500 disabled:opacity-50"
+        >
+          Migrate
+        </button>
+        <button
           @click="workflowsStore.clearSelection()"
           class="text-sm text-gray-600 hover:text-gray-900"
         >
@@ -348,6 +363,16 @@ function openTransfer() {
       :instances="instancesStore.instances"
       @close="showTransferModal = false"
       @transferred="workflowsStore.clearSelection(); showTransferModal = false"
+    />
+
+    <!-- Migrate Modal -->
+    <MigrateModal
+      v-if="showMigrateModal"
+      :source-instance-id="selectedInstanceId!"
+      :workflow-ids="Array.from(workflowsStore.selectedWorkflows)"
+      :instances="instancesStore.instances"
+      @close="showMigrateModal = false"
+      @migrated="workflowsStore.clearSelection(); showMigrateModal = false"
     />
   </div>
 </template>

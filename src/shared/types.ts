@@ -100,3 +100,37 @@ export interface TransferResult {
   newId?: string
   error?: string
 }
+
+export interface N8nCredentialRef {
+  id: string
+  name: string
+  type: string
+}
+
+export interface MigrateRequest {
+  sourceInstanceId: string
+  targetInstanceId: string
+  workflowIds: string[]
+  targetProjectId?: string
+}
+
+export interface MigrateAnalysis {
+  selectedWorkflows: Array<{ id: string; name: string }>
+  additionalSubworkflows: Array<{ id: string; name: string; referencedBy: string }>
+  existingWorkflows: Array<{ sourceId: string; targetId: string; name: string }>
+  newWorkflows: Array<{ sourceId: string; name: string }>
+  matchedCredentials: Array<{ name: string; type: string; resolvedVia: 'phase0' | 'api' }>
+  missingCredentials: Array<{ name: string; type: string; usedByWorkflows: string[] }>
+  credentialsApiAvailable: boolean
+  dynamicReferences: Array<{ workflowName: string; nodeName: string; expression: string }>
+  brokenReferences: Array<{ workflowName: string; nodeName: string }>
+}
+
+export interface MigrateResult {
+  workflowId: string
+  workflowName: string
+  sourceId: string
+  status: 'created' | 'updated' | 'error'
+  targetId?: string
+  error?: string
+}

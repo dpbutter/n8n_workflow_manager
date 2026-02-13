@@ -5,6 +5,7 @@ import { config } from 'dotenv'
 import instancesRouter from './routes/instances.js'
 import workflowsRouter from './routes/workflows.js'
 import gitRouter from './routes/git.js'
+import migrateRouter from './routes/migrate.js'
 
 config()
 
@@ -18,6 +19,7 @@ app.use(express.json())
 app.use('/api/instances', instancesRouter)
 app.use('/api/workflows', workflowsRouter)
 app.use('/api/git', gitRouter)
+app.use('/api/migrate', migrateRouter)
 
 // Health check
 app.get('/api/health', (req, res) => {

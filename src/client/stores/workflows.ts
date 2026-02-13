@@ -35,6 +35,27 @@ export interface TransferResult {
   error?: string
 }
 
+export interface MigrateAnalysis {
+  selectedWorkflows: Array<{ id: string; name: string }>
+  additionalSubworkflows: Array<{ id: string; name: string; referencedBy: string }>
+  existingWorkflows: Array<{ sourceId: string; targetId: string; name: string }>
+  newWorkflows: Array<{ sourceId: string; name: string }>
+  matchedCredentials: Array<{ name: string; type: string; resolvedVia: 'phase0' | 'api' }>
+  missingCredentials: Array<{ name: string; type: string; usedByWorkflows: string[] }>
+  credentialsApiAvailable: boolean
+  dynamicReferences: Array<{ workflowName: string; nodeName: string; expression: string }>
+  brokenReferences: Array<{ workflowName: string; nodeName: string }>
+}
+
+export interface MigrateResult {
+  workflowId: string
+  workflowName: string
+  sourceId: string
+  status: 'created' | 'updated' | 'error'
+  targetId?: string
+  error?: string
+}
+
 export interface GitCommit {
   hash: string
   date: string
@@ -139,6 +160,39 @@ export const useWorkflowsStore = defineStore('workflows', () => {
     }
   }
 
+  async function analyzeMigration(
+    sourceInstanceId: string,
+    targetInstanceId: string,
+    workflowIds: string[],
+    targetProjectId?: string
+  ): Promise<MigrateAnalysis> {
+    const response = await axios.post('/api/migrate/analyze', {
+      sourceInstanceId, targetInstanceId, workflowIds, targetProjectId
+    })
+    return response.data.data
+  }
+
+  async function executeMigration(
+    sourceInstanceId: string,
+    targetInstanceId: string,
+    workflowIds: string[],
+    targetProjectId?: string
+  ): Promise<MigrateResult[]> {
+    loading.value = true
+    error.value = null
+    try {
+      const response = await axios.post('/api/migrate/execute', {
+        sourceInstanceId, targetInstanceId, workflowIds, targetProjectId
+      })
+      return response.data.data
+    } catch (e) {
+      error.value = String(e)
+      throw e
+    } finally {
+      loading.value = false
+    }
+  }
+
   async function fetchProjects(instanceId: string): Promise<N8nProject[]> {
     try {
       const response = await axios.get(`/api/workflows/${instanceId}/projects`)
@@ -171,6 +225,8 @@ export const useWorkflowsStore = defineStore('workflows', () => {
     selectAll,
     backupWorkflows,
     transferWorkflows,
+    analyzeMigration,
+    executeMigration,
     getBackupHistory
   }
 })
