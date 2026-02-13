@@ -223,6 +223,34 @@ function done() {
               </ul>
             </div>
 
+            <!-- Matched data tables -->
+            <div v-if="analysis.matchedDataTables.length > 0" class="bg-green-50 border border-green-200 rounded-lg p-3">
+              <h4 class="text-sm font-medium text-green-800">Data Tables Matched ({{ analysis.matchedDataTables.length }})</h4>
+              <ul class="text-sm text-green-700">
+                <li v-for="dt in analysis.matchedDataTables" :key="dt.name">
+                  {{ dt.name }} <span class="text-xs">(via {{ dt.resolvedVia === 'phase0' ? 'existing target' : 'API' }})</span>
+                </li>
+              </ul>
+            </div>
+
+            <!-- Missing data tables -->
+            <div v-if="analysis.missingDataTables.length > 0" class="bg-amber-50 border border-amber-200 rounded-lg p-3">
+              <h4 class="text-sm font-medium text-amber-800">Missing Data Tables ({{ analysis.missingDataTables.length }})</h4>
+              <p class="text-xs text-amber-700 mb-1">You'll need to create these in the target instance. Workflows referencing them will be migrated but won't work until the tables exist.</p>
+              <ul class="text-sm text-amber-700">
+                <li v-for="dt in analysis.missingDataTables" :key="dt.name">
+                  {{ dt.name }} &mdash; used by {{ dt.usedByWorkflows.join(', ') }}
+                </li>
+              </ul>
+            </div>
+
+            <!-- Data tables API note -->
+            <div v-if="!analysis.dataTablesApiAvailable && (analysis.matchedDataTables.length > 0 || analysis.missingDataTables.length > 0)" class="bg-gray-50 border border-gray-200 rounded-lg p-3">
+              <p class="text-xs text-gray-600">
+                Data Tables API not available on target. Data table matching for new workflows is limited — you may need to update table references manually.
+              </p>
+            </div>
+
             <!-- Dynamic references -->
             <div v-if="analysis.dynamicReferences.length > 0" class="bg-amber-50 border border-amber-200 rounded-lg p-3">
               <h4 class="text-sm font-medium text-amber-800">Dynamic References ({{ analysis.dynamicReferences.length }})</h4>

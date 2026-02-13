@@ -107,6 +107,11 @@ export interface N8nCredentialRef {
   type: string
 }
 
+export interface N8nDataTableRef {
+  id: string
+  name: string
+}
+
 export interface MigrateRequest {
   sourceInstanceId: string
   targetInstanceId: string
@@ -122,6 +127,9 @@ export interface MigrateAnalysis {
   matchedCredentials: Array<{ name: string; type: string; resolvedVia: 'phase0' | 'api' }>
   missingCredentials: Array<{ name: string; type: string; usedByWorkflows: string[] }>
   credentialsApiAvailable: boolean
+  matchedDataTables: Array<{ name: string; resolvedVia: 'phase0' | 'api' }>
+  missingDataTables: Array<{ name: string; usedByWorkflows: string[] }>
+  dataTablesApiAvailable: boolean
   dynamicReferences: Array<{ workflowName: string; nodeName: string; expression: string }>
   brokenReferences: Array<{ workflowName: string; nodeName: string }>
 }

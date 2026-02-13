@@ -20,6 +20,8 @@ const EXECUTE_WORKFLOW_TYPES = [
   'n8n-nodes-langchain.toolWorkflow',
 ]
 
+const DATA_TABLE_TYPE = 'n8n-nodes-base.dataTable'
+
 interface WorkflowRefExtraction {
   id: string | null
   isDynamic: boolean
@@ -193,6 +195,64 @@ function applyCredentialsApi(
     }
   }
   return { matched, missing }
+}
+
+// --- Data Table helpers ---
+
+interface DataTableRef {
+  id: string
+  name: string
+}
+
+function extractDataTableRef(node: N8nNode): DataTableRef | null {
+  if (node.type !== DATA_TABLE_TYPE) return null
+  const dtArg = node.parameters?.dataTableId as unknown
+  if (!dtArg || typeof dtArg !== 'object') return null
+
+  const obj = dtArg as Record<string, unknown>
+  const id = obj.value as string | undefined
+  const name = obj.cachedResultName as string | undefined
+  if (!id || !name) return null
+  return { id, name }
+}
+
+function extractDataTableRefs(nodes: N8nNode[]): Array<{ name: string; nodeNames: string[] }> {
+  const byName = new Map<string, string[]>()
+  for (const node of nodes) {
+    const ref = extractDataTableRef(node)
+    if (!ref) continue
+    if (!byName.has(ref.name)) byName.set(ref.name, [])
+    byName.get(ref.name)!.push(node.name)
+  }
+  return Array.from(byName.entries()).map(([name, nodeNames]) => ({ name, nodeNames }))
+}
+
+function rewriteDataTableRefs(nodes: N8nNode[], idMap: Map<string, string>): void {
+  for (const node of nodes) {
+    if (node.type !== DATA_TABLE_TYPE) continue
+    const dtArg = node.parameters?.dataTableId as unknown
+    if (!dtArg || typeof dtArg !== 'object') continue
+
+    const obj = dtArg as Record<string, unknown>
+    const currentId = obj.value as string | undefined
+    if (currentId && idMap.has(currentId)) {
+      obj.value = idMap.get(currentId)
+    }
+  }
+}
+
+function applyPhase0DataTables(sourceNodes: N8nNode[], targetNodes: N8nNode[]): void {
+  for (const srcNode of sourceNodes) {
+    if (srcNode.type !== DATA_TABLE_TYPE) continue
+    const tgtNode = targetNodes.find(n => n.name === srcNode.name && n.type === srcNode.type)
+    if (!tgtNode) continue
+
+    const srcDt = srcNode.parameters?.dataTableId as Record<string, unknown> | undefined
+    const tgtDt = tgtNode.parameters?.dataTableId as Record<string, unknown> | undefined
+    if (srcDt && tgtDt?.value) {
+      srcDt.value = tgtDt.value
+    }
+  }
 }
 
 // Topological sort — leaves first
@@ -375,6 +435,72 @@ async function runAnalysis(req: MigrateRequest): Promise<MigrateAnalysis> {
     missingCredMap.delete(key)
   }
 
+  // Data table analysis
+  const matchedDataTables: MigrateAnalysis['matchedDataTables'] = []
+  const missingDataTableMap = new Map<string, { name: string; usedByWorkflows: string[] }>()
+  const matchedDtNames = new Set<string>()
+
+  // Phase 0: For existing workflows, match data tables from target nodes
+  for (const existing of existingWorkflows) {
+    const sourceWf = discovered.find(d => d.workflow.id === existing.sourceId)!.workflow
+    try {
+      const targetWf = await targetApi.getWorkflow(existing.targetId)
+      for (const srcNode of sourceWf.nodes || []) {
+        const srcRef = extractDataTableRef(srcNode)
+        if (!srcRef || matchedDtNames.has(srcRef.name)) continue
+
+        const tgtNode = (targetWf.nodes || []).find(n => n.name === srcNode.name && n.type === srcNode.type)
+        const tgtRef = tgtNode ? extractDataTableRef(tgtNode) : null
+        if (tgtRef) {
+          matchedDtNames.add(srcRef.name)
+          matchedDataTables.push({ name: srcRef.name, resolvedVia: 'phase0' })
+        }
+      }
+    } catch {
+      // Skip if can't fetch target workflow
+    }
+  }
+
+  // Data tables API for remaining
+  let dataTablesApiAvailable = false
+  let targetDtMap = new Map<string, string>() // name -> id
+
+  try {
+    const targetDts = await targetApi.listDataTables()
+    dataTablesApiAvailable = true
+    for (const dt of targetDts) {
+      targetDtMap.set(dt.name, dt.id)
+    }
+  } catch {
+    dataTablesApiAvailable = false
+  }
+
+  // Check all workflows for unmatched data tables
+  for (const d of discovered) {
+    const dtRefs = extractDataTableRefs(d.workflow.nodes || [])
+    for (const dtRef of dtRefs) {
+      if (matchedDtNames.has(dtRef.name)) continue
+
+      if (dataTablesApiAvailable && targetDtMap.has(dtRef.name)) {
+        matchedDtNames.add(dtRef.name)
+        matchedDataTables.push({ name: dtRef.name, resolvedVia: 'api' })
+      } else {
+        if (!missingDataTableMap.has(dtRef.name)) {
+          missingDataTableMap.set(dtRef.name, { name: dtRef.name, usedByWorkflows: [] })
+        }
+        const entry = missingDataTableMap.get(dtRef.name)!
+        if (!entry.usedByWorkflows.includes(d.workflow.name)) {
+          entry.usedByWorkflows.push(d.workflow.name)
+        }
+      }
+    }
+  }
+
+  // Remove from missing if matched
+  for (const name of matchedDtNames) {
+    missingDataTableMap.delete(name)
+  }
+
   return {
     selectedWorkflows,
     additionalSubworkflows,
@@ -383,6 +509,9 @@ async function runAnalysis(req: MigrateRequest): Promise<MigrateAnalysis> {
     matchedCredentials,
     missingCredentials: Array.from(missingCredMap.values()),
     credentialsApiAvailable,
+    matchedDataTables,
+    missingDataTables: Array.from(missingDataTableMap.values()),
+    dataTablesApiAvailable,
     dynamicReferences,
     brokenReferences,
   }
@@ -439,6 +568,17 @@ router.post('/execute', async (req: Request, res: Response) => {
       // Credentials API not available
     }
 
+    // Build data table map from API (name -> target id)
+    let targetDtMap = new Map<string, string>()
+    try {
+      const targetDts = await targetApi.listDataTables()
+      for (const dt of targetDts) {
+        targetDtMap.set(dt.name, dt.id)
+      }
+    } catch {
+      // Data tables API not available
+    }
+
     // Pre-populate ID map for existing workflows
     const idMap = new Map<string, string>() // sourceId -> targetId
     for (const wf of allWorkflows) {
@@ -462,21 +602,37 @@ router.post('/execute', async (req: Request, res: Response) => {
         // Rewrite subworkflow references
         rewriteWorkflowRefs(nodes, idMap)
 
-        // Credential resolution
+        // Credential and data table resolution
         const existingTarget = targetByName.get(sourceWf.name)
         if (existingTarget) {
-          // Tier 1: Phase 0 — copy credentials from existing target workflow
+          // Phase 0 — copy credentials and data tables from existing target workflow
           try {
             const targetWf = await targetApi.getWorkflow(existingTarget.id)
             applyPhase0Credentials(nodes, targetWf.nodes || [])
+            applyPhase0DataTables(nodes, targetWf.nodes || [])
           } catch {
-            // Fall through to Tier 2
+            // Fall through to API-based matching
           }
         }
 
-        // Tier 2: API-based credential matching for any remaining
+        // API-based credential matching for any remaining
         if (targetCredMap.size > 0) {
           applyCredentialsApi(nodes, targetCredMap)
+        }
+
+        // API-based data table rewriting
+        if (targetDtMap.size > 0) {
+          // Build source-id -> target-id map from name matching
+          const dtIdMap = new Map<string, string>()
+          for (const node of nodes) {
+            const ref = extractDataTableRef(node)
+            if (!ref) continue
+            const targetId = targetDtMap.get(ref.name)
+            if (targetId && !dtIdMap.has(ref.id)) {
+              dtIdMap.set(ref.id, targetId)
+            }
+          }
+          rewriteDataTableRefs(nodes, dtIdMap)
         }
 
         // Scrub metadata
