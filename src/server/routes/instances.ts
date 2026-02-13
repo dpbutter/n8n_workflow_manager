@@ -53,7 +53,11 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     const { name, url, apiKey, projectId } = req.body
-    const instance = await instanceStore.updateInstance(req.params.id, { name, url, apiKey, projectId })
+    const updates: Record<string, unknown> = { name, url, projectId }
+    if (apiKey) {
+      updates.apiKey = apiKey
+    }
+    const instance = await instanceStore.updateInstance(req.params.id, updates)
     if (!instance) {
       return res.status(404).json({ success: false, error: 'Instance not found' })
     }
@@ -77,7 +81,26 @@ router.delete('/:id', async (req, res) => {
   }
 })
 
-// Test connection
+// Test connection before saving (with provided credentials)
+// IMPORTANT: This must be defined BEFORE /:id/test to avoid Express matching
+// "test-connection" as an :id parameter
+router.post('/test-connection', async (req, res) => {
+  try {
+    const { url, apiKey } = req.body
+    if (!url || !apiKey) {
+      return res.status(400).json({ success: false, error: 'url and apiKey are required' })
+    }
+
+    const api = new N8nApiService({ id: '', name: '', url, apiKey, createdAt: '' })
+    const connected = await api.testConnection()
+
+    res.json({ success: true, data: { connected } })
+  } catch (error) {
+    res.status(500).json({ success: false, error: String(error) })
+  }
+})
+
+// Test connection for an existing saved instance
 router.post('/:id/test', async (req, res) => {
   try {
     const instance = await instanceStore.getInstanceById(req.params.id)
@@ -91,23 +114,6 @@ router.post('/:id/test', async (req, res) => {
     if (connected) {
       await instanceStore.updateInstance(instance.id, { lastConnected: new Date().toISOString() })
     }
-
-    res.json({ success: true, data: { connected } })
-  } catch (error) {
-    res.status(500).json({ success: false, error: String(error) })
-  }
-})
-
-// Test connection before saving (with provided credentials)
-router.post('/test-connection', async (req, res) => {
-  try {
-    const { url, apiKey } = req.body
-    if (!url || !apiKey) {
-      return res.status(400).json({ success: false, error: 'url and apiKey are required' })
-    }
-
-    const api = new N8nApiService({ id: '', name: '', url, apiKey, createdAt: '' })
-    const connected = await api.testConnection()
 
     res.json({ success: true, data: { connected } })
   } catch (error) {

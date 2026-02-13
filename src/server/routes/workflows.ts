@@ -4,6 +4,30 @@ import { N8nApiService } from '../services/n8n-api.js'
 
 const router = Router()
 
+const ALLOWED_SETTINGS = new Set([
+  'executionOrder',
+  'errorWorkflow',
+  'timezone',
+  'saveManualExecutions',
+  'callerPolicy',
+  'callerIds',
+  'executionTimeout',
+  'maxExecutionTimeout',
+  'saveDataErrorExecution',
+  'saveDataSuccessExecution',
+  'saveExecutionProgress',
+])
+
+function scrubSettings(settings: Record<string, unknown>): Record<string, unknown> {
+  const clean: Record<string, unknown> = {}
+  for (const key of Object.keys(settings)) {
+    if (ALLOWED_SETTINGS.has(key)) {
+      clean[key] = settings[key]
+    }
+  }
+  return clean
+}
+
 // List projects from an instance
 router.get('/:instanceId/projects', async (req, res) => {
   try {
@@ -89,11 +113,16 @@ router.post('/transfer', async (req, res) => {
         const workflow = await sourceApi.getWorkflow(workflowId)
 
         // Prepare for import (remove id - workflows are created as inactive by default)
+        const settings = scrubSettings(
+          (workflow.settings as Record<string, unknown>) || {}
+        )
+        if (!settings.executionOrder) settings.executionOrder = 'v1'
+
         const importData = {
           name: workflow.name,
           nodes: workflow.nodes,
           connections: workflow.connections,
-          settings: workflow.settings
+          settings
         }
 
         // Create in target (optionally in a specific project)

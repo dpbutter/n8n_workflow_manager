@@ -119,16 +119,44 @@ async function discoverDependencies(
   }
 }
 
+const ALLOWED_SETTINGS = new Set([
+  'executionOrder',
+  'errorWorkflow',
+  'timezone',
+  'saveManualExecutions',
+  'callerPolicy',
+  'callerIds',
+  'executionTimeout',
+  'maxExecutionTimeout',
+  'saveDataErrorExecution',
+  'saveDataSuccessExecution',
+  'saveExecutionProgress',
+])
+
+function scrubSettings(settings: Record<string, unknown>): Record<string, unknown> {
+  const clean: Record<string, unknown> = {}
+  for (const key of Object.keys(settings)) {
+    if (ALLOWED_SETTINGS.has(key)) {
+      clean[key] = settings[key]
+    }
+  }
+  return clean
+}
+
 function scrubForDeploy(workflow: N8nWorkflow): Record<string, unknown> {
-  const body = { ...workflow } as Record<string, unknown>
-  delete body.id
-  delete body.active
-  delete body.tags
-  delete body.createdAt
-  delete body.updatedAt
-  delete body.versionId
-  delete body.isArchived
-  if (!body.settings) body.settings = { executionOrder: 'v1' }
+  // Allow-list: only include fields the n8n API accepts for create/update
+  const settings = scrubSettings(
+    (workflow.settings as Record<string, unknown>) || { executionOrder: 'v1' }
+  )
+  if (!settings.executionOrder) settings.executionOrder = 'v1'
+
+  const body: Record<string, unknown> = {
+    name: workflow.name,
+    nodes: workflow.nodes,
+    connections: workflow.connections,
+    settings,
+  }
+  if (workflow.staticData) body.staticData = workflow.staticData
   return body
 }
 
@@ -334,6 +362,15 @@ async function runAnalysis(req: MigrateRequest): Promise<MigrateAnalysis> {
     await discoverDependencies(sourceApi, wfId, visited, null, discovered, dynamicReferences, brokenReferences)
   }
 
+  // Reclassify: if a workflow was discovered as a subworkflow but is also
+  // user-selected, treat it as user-selected (referencedBy = null)
+  const selectedIdSet = new Set(req.workflowIds)
+  for (const d of discovered) {
+    if (d.referencedBy !== null && selectedIdSet.has(d.workflow.id)) {
+      d.referencedBy = null
+    }
+  }
+
   const selectedWorkflows = discovered
     .filter(d => d.referencedBy === null)
     .map(d => ({ id: d.workflow.id, name: d.workflow.name }))
@@ -501,6 +538,37 @@ async function runAnalysis(req: MigrateRequest): Promise<MigrateAnalysis> {
     missingDataTableMap.delete(name)
   }
 
+  // Tag analysis
+  const matchedTags: MigrateAnalysis['matchedTags'] = []
+  const createdTags: MigrateAnalysis['createdTags'] = []
+  let tagsApiAvailable = false
+
+  // Collect all unique tag names from discovered workflows
+  const allTagNames = new Set<string>()
+  for (const d of discovered) {
+    for (const tag of d.workflow.tags || []) {
+      allTagNames.add(tag.name)
+    }
+  }
+
+  if (allTagNames.size > 0) {
+    try {
+      const targetTags = await targetApi.listTags()
+      tagsApiAvailable = true
+      const targetTagNames = new Set(targetTags.map(t => t.name))
+
+      for (const name of allTagNames) {
+        if (targetTagNames.has(name)) {
+          matchedTags.push({ name })
+        } else {
+          createdTags.push({ name })
+        }
+      }
+    } catch {
+      tagsApiAvailable = false
+    }
+  }
+
   return {
     selectedWorkflows,
     additionalSubworkflows,
@@ -512,6 +580,9 @@ async function runAnalysis(req: MigrateRequest): Promise<MigrateAnalysis> {
     matchedDataTables,
     missingDataTables: Array.from(missingDataTableMap.values()),
     dataTablesApiAvailable,
+    matchedTags,
+    createdTags,
+    tagsApiAvailable,
     dynamicReferences,
     brokenReferences,
   }
@@ -579,6 +650,37 @@ router.post('/execute', async (req: Request, res: Response) => {
       // Data tables API not available
     }
 
+    // Build tag name -> target ID map, auto-creating missing tags
+    const targetTagMap = new Map<string, string>() // name -> targetId
+    try {
+      const targetTags = await targetApi.listTags()
+      for (const t of targetTags) {
+        targetTagMap.set(t.name, t.id)
+      }
+
+      // Collect all tag names from source workflows
+      const neededTagNames = new Set<string>()
+      for (const wf of allWorkflows) {
+        for (const tag of wf.tags || []) {
+          neededTagNames.add(tag.name)
+        }
+      }
+
+      // Create any missing tags on target
+      for (const name of neededTagNames) {
+        if (!targetTagMap.has(name)) {
+          try {
+            const created = await targetApi.createTag(name)
+            targetTagMap.set(name, created.id)
+          } catch {
+            // Best effort — skip if tag creation fails
+          }
+        }
+      }
+    } catch {
+      // Tags API not available — skip tag assignment
+    }
+
     // Pre-populate ID map for existing workflows
     const idMap = new Map<string, string>() // sourceId -> targetId
     for (const wf of allWorkflows) {
@@ -640,6 +742,7 @@ router.post('/execute', async (req: Request, res: Response) => {
         deployBody.nodes = nodes
         deployBody.connections = sourceWf.connections
 
+        let targetId: string | undefined
         if (existingTarget) {
           // Deactivate if active, then update
           if (existingTarget.active) {
@@ -651,6 +754,7 @@ router.post('/execute', async (req: Request, res: Response) => {
           }
           const updated = await targetApi.updateWorkflow(existingTarget.id, deployBody as Partial<N8nWorkflow>)
           idMap.set(workflow.id, updated.id)
+          targetId = updated.id
           results.push({
             workflowId: workflow.id,
             workflowName: workflow.name,
@@ -665,6 +769,7 @@ router.post('/execute', async (req: Request, res: Response) => {
             body.targetProjectId
           )
           idMap.set(workflow.id, created.id)
+          targetId = created.id
           results.push({
             workflowId: workflow.id,
             workflowName: workflow.name,
@@ -672,6 +777,20 @@ router.post('/execute', async (req: Request, res: Response) => {
             status: 'created',
             targetId: created.id,
           })
+        }
+
+        // Assign tags to the target workflow (best-effort)
+        if (targetId && targetTagMap.size > 0 && sourceWf.tags?.length) {
+          try {
+            const tagIds = sourceWf.tags
+              .map(t => targetTagMap.get(t.name))
+              .filter((id): id is string => !!id)
+            if (tagIds.length > 0) {
+              await targetApi.setWorkflowTags(targetId, tagIds)
+            }
+          } catch {
+            // Best effort — don't fail the workflow migration for tags
+          }
         }
       } catch (e) {
         console.error(`[Migrate] Error migrating workflow ${workflow.name}:`, e)

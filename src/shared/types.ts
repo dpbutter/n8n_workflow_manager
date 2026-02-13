@@ -101,6 +101,11 @@ export interface TransferResult {
   error?: string
 }
 
+export interface N8nTag {
+  id: string
+  name: string
+}
+
 export interface N8nCredentialRef {
   id: string
   name: string
@@ -130,6 +135,9 @@ export interface MigrateAnalysis {
   matchedDataTables: Array<{ name: string; resolvedVia: 'phase0' | 'api' }>
   missingDataTables: Array<{ name: string; usedByWorkflows: string[] }>
   dataTablesApiAvailable: boolean
+  matchedTags: Array<{ name: string }>
+  createdTags: Array<{ name: string }>
+  tagsApiAvailable: boolean
   dynamicReferences: Array<{ workflowName: string; nodeName: string; expression: string }>
   brokenReferences: Array<{ workflowName: string; nodeName: string }>
 }

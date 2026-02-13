@@ -112,10 +112,16 @@ async function deleteInstance(id: string) {
           <span
             :class="[
               'inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium whitespace-nowrap flex-shrink-0',
-              instance.hasApiKey ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+              store.connectionStatus[instance.id] === 'connected' ? 'bg-green-100 text-green-800' :
+              store.connectionStatus[instance.id] === 'testing' ? 'bg-yellow-100 text-yellow-800' :
+              store.connectionStatus[instance.id] === 'failed' ? 'bg-red-100 text-red-800' :
+              'bg-gray-100 text-gray-800'
             ]"
           >
-            {{ instance.hasApiKey ? 'Connected' : 'No Key' }}
+            {{ store.connectionStatus[instance.id] === 'connected' ? 'Connected' :
+               store.connectionStatus[instance.id] === 'testing' ? 'Testing...' :
+               store.connectionStatus[instance.id] === 'failed' ? 'Unreachable' :
+               'Unknown' }}
           </span>
         </div>
         <div class="mt-4 flex space-x-4">

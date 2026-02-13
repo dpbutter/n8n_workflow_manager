@@ -1,5 +1,9 @@
 import axios, { AxiosInstance } from 'axios'
-import type { N8nInstance, N8nWorkflow, N8nProject, N8nCredentialRef, N8nDataTableRef, WorkflowListItem, WorkflowListResponse } from '../../shared/types.js'
+import https from 'https'
+import type { N8nInstance, N8nWorkflow, N8nProject, N8nCredentialRef, N8nDataTableRef, N8nTag, WorkflowListItem, WorkflowListResponse } from '../../shared/types.js'
+
+// Allow self-signed certificates for local/dev n8n instances
+const httpsAgent = new https.Agent({ rejectUnauthorized: false })
 
 export class N8nApiService {
   private client: AxiosInstance
@@ -11,7 +15,8 @@ export class N8nApiService {
         'Accept': 'application/json',
         'Content-Type': 'application/json',
         'X-N8N-API-KEY': instance.apiKey
-      }
+      },
+      httpsAgent
     })
   }
 
@@ -111,6 +116,20 @@ export class N8nApiService {
   async listDataTables(): Promise<N8nDataTableRef[]> {
     const response = await this.client.get<{ data: N8nDataTableRef[] }>('/data-tables')
     return response.data.data || []
+  }
+
+  async listTags(): Promise<N8nTag[]> {
+    const response = await this.client.get<{ data: N8nTag[] }>('/tags')
+    return response.data.data || []
+  }
+
+  async createTag(name: string): Promise<N8nTag> {
+    const response = await this.client.post<N8nTag>('/tags', { name })
+    return response.data
+  }
+
+  async setWorkflowTags(workflowId: string, tagIds: string[]): Promise<void> {
+    await this.client.put(`/workflows/${workflowId}/tags`, tagIds.map(id => ({ id })))
   }
 
   async listAllWorkflows(): Promise<WorkflowListItem[]> {

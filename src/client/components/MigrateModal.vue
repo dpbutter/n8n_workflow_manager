@@ -251,6 +251,30 @@ function done() {
               </p>
             </div>
 
+            <!-- Matched tags -->
+            <div v-if="analysis.matchedTags.length > 0" class="bg-green-50 border border-green-200 rounded-lg p-3">
+              <h4 class="text-sm font-medium text-green-800">Tags Matched ({{ analysis.matchedTags.length }})</h4>
+              <ul class="text-sm text-green-700">
+                <li v-for="t in analysis.matchedTags" :key="t.name">{{ t.name }}</li>
+              </ul>
+            </div>
+
+            <!-- Tags to create -->
+            <div v-if="analysis.createdTags.length > 0" class="bg-blue-50 border border-blue-200 rounded-lg p-3">
+              <h4 class="text-sm font-medium text-blue-800">Tags to Create ({{ analysis.createdTags.length }})</h4>
+              <p class="text-xs text-blue-700 mb-1">These tags will be auto-created on the target during migration.</p>
+              <ul class="text-sm text-blue-700">
+                <li v-for="t in analysis.createdTags" :key="t.name">{{ t.name }}</li>
+              </ul>
+            </div>
+
+            <!-- Tags API note -->
+            <div v-if="!analysis.tagsApiAvailable && (analysis.matchedTags.length > 0 || analysis.createdTags.length > 0)" class="bg-gray-50 border border-gray-200 rounded-lg p-3">
+              <p class="text-xs text-gray-600">
+                Tags API not available on target. Tags will not be transferred during migration.
+              </p>
+            </div>
+
             <!-- Dynamic references -->
             <div v-if="analysis.dynamicReferences.length > 0" class="bg-amber-50 border border-amber-200 rounded-lg p-3">
               <h4 class="text-sm font-medium text-amber-800">Dynamic References ({{ analysis.dynamicReferences.length }})</h4>

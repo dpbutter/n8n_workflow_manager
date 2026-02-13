@@ -1,5 +1,6 @@
 import express from 'express'
 import cors from 'cors'
+import path from 'path'
 import { config } from 'dotenv'
 
 import instancesRouter from './routes/instances.js'
@@ -24,6 +25,12 @@ app.use('/api/migrate', migrateRouter)
 // Health check
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() })
+})
+
+// Serve static frontend files and SPA fallback
+app.use(express.static('dist/client'))
+app.get('*', (req, res) => {
+  res.sendFile(path.resolve('dist/client/index.html'))
 })
 
 app.listen(PORT, () => {
